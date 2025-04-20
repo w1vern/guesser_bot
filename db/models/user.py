@@ -11,4 +11,6 @@ class User(Base):
     tg_id: Mapped[str] = mapped_column(unique=True, index=True, nullable=False)
     rank: Mapped[float]
     admin: Mapped[bool]
+    creator: Mapped[bool]
+    
 
