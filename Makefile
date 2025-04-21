@@ -1,10 +1,8 @@
 
-
 .PHONY: back
 
 bot:
 	set TARGET=dev&& python -m bot
-
 
 postgres:
 	docker start PostgreSQL
