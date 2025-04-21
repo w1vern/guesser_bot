@@ -24,3 +24,7 @@ class FileRepository:
     async def get_by_id(self, file_id: UUID) -> Optional[File]:
         stmt = select(File).where(File.id == file_id)
         return await self.session.scalar(stmt)
+    
+    async def get_all(self) -> list[File]:
+        stmt = select(File)
+        return list((await self.session.scalars(stmt)).all())

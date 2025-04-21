@@ -16,7 +16,8 @@ class QuestionType(str, Enum):
 class Question(Base):
     __tablename__ = "questions"
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    question_type: Mapped[str]
+    
+    answers_count: Mapped[int]
     rank: Mapped[float]
 
     file_id: Mapped[UUID] = mapped_column(ForeignKey("files.id"))

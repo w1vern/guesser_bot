@@ -1,5 +1,6 @@
 import asyncio
 import random
+from typing import Annotated
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.enums import ParseMode
@@ -7,9 +8,60 @@ from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, ReplyKey
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from sqlalchemy.ext.asyncio import AsyncSession
+from dependency_injector import containers, providers
+from dependency_injector.wiring import Provide, inject
+
+from config import settings
+from db.main import DatabaseSessionManager, get_db_url
+from db.models import Question
+
+from enum import Enum
+
+from redis.asyncio import Redis
 
 from config import settings
 
+
+class RedisType(str, Enum):
+    incorrect_credentials = "incorrect_credentials",
+    invalidated_access_token = "invalidated_access_token"
+    incorrect_credentials_ip = "incorrect_credentials_ip"
+    task = "task"
+    task_status = "task_status"
+
+
+def get_redis_client() -> Redis:
+    return Redis(host=settings.redis_ip,
+                 port=settings.redis_port,
+                 db=0,
+                 decode_responses=True)
+
+DB_URL = get_db_url(user=settings.db_user,
+                    password=settings.db_password,
+                    ip=settings.db_ip,
+                    port=settings.db_port,
+                    name=settings.db_name
+                    )
+
+
+class Container(containers.DeclarativeContainer):
+    wiring_config = containers.WiringConfiguration(packages=["handlers"])
+
+    config = providers.Configuration()
+    db_session_manager = providers.Singleton(
+        DatabaseSessionManager,
+        host=DB_URL,
+        engine_kwargs={"echo": True}
+    )
+
+    db_session = providers.Resource(
+        lambda db_manager: db_manager.session(),
+        db_manager=db_session_manager,
+    )
+
+
+Session: Annotated[AsyncSession, Provide[Container.db_session]]
 
 
 dp = Dispatcher()
@@ -18,11 +70,14 @@ dp = Dispatcher()
 # Состояния игры
 class GameState(StatesGroup):
     playing = State()
+    creators_editing = State()
+    creating_content = State()
 
 
 # Генерация случайной клавиатуры
-def generate_keyboard() -> ReplyKeyboardMarkup:
-    buttons_count = random.randint(4, 8)
+def generate_keyboard(question: Question) -> ReplyKeyboardMarkup:
+
+    buttons_count = question.answers_count + 1
     numbers = random.sample(range(1, 101), buttons_count)
     buttons = [[KeyboardButton(text=str(num))] for num in numbers]
 
@@ -30,6 +85,18 @@ def generate_keyboard() -> ReplyKeyboardMarkup:
         keyboard=buttons,
         resize_keyboard=True,
         one_time_keyboard=True
+    )
+
+# Функция запуска следующего раунда
+
+
+async def next_round(message: Message):
+    number = random.randint(1, 10)
+    keyboard = generate_keyboard()
+    await message.answer(
+        f"🎲 Случайное число: <b>{number}</b>\nВыберите одно из чисел ниже:",
+        parse_mode=ParseMode.HTML,
+        reply_markup=keyboard
     )
 
 
@@ -60,18 +127,6 @@ async def cmd_end_game(message: Message, state: FSMContext):
     await message.answer("Игра завершена!", reply_markup=ReplyKeyboardRemove())
 
 
-# Функция запуска следующего раунда
-async def next_round(message: Message):
-    number = random.randint(1, 10)
-    keyboard = generate_keyboard()
-    await message.answer(
-        f"🎲 Случайное число: <b>{number}</b>\nВыберите одно из чисел ниже:",
-        parse_mode=ParseMode.HTML,
-        reply_markup=keyboard
-    )
-
-
-# Запуск
 async def main():
     bot = Bot(token=settings.tg_bot_token)
     await dp.start_polling(bot)
