@@ -2,7 +2,7 @@ import asyncio
 import random
 from typing import Annotated
 
-from aiogram import Bot, Dispatcher, F
+from aiogram import Bot, Dispatcher, F, types
 from aiogram.enums import ParseMode
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from aiogram.filters import Command
@@ -24,11 +24,7 @@ from config import settings
 
 
 class RedisType(str, Enum):
-    incorrect_credentials = "incorrect_credentials",
-    invalidated_access_token = "invalidated_access_token"
-    incorrect_credentials_ip = "incorrect_credentials_ip"
-    task = "task"
-    task_status = "task_status"
+    pass
 
 
 def get_redis_client() -> Redis:
@@ -66,15 +62,15 @@ Session: Annotated[AsyncSession, Provide[Container.db_session]]
 
 dp = Dispatcher()
 
+async def get_user(message: types.Message, session: AsyncSession = types.Dependency(session_ma) ):
 
-# Состояния игры
+
 class GameState(StatesGroup):
     playing = State()
     creators_editing = State()
     creating_content = State()
 
 
-# Генерация случайной клавиатуры
 def generate_keyboard(question: Question) -> ReplyKeyboardMarkup:
 
     buttons_count = question.answers_count + 1
@@ -87,7 +83,6 @@ def generate_keyboard(question: Question) -> ReplyKeyboardMarkup:
         one_time_keyboard=True
     )
 
-# Функция запуска следующего раунда
 
 
 async def next_round(message: Message):
@@ -100,27 +95,23 @@ async def next_round(message: Message):
     )
 
 
-# /start — просто приветствие
 @dp.message(Command("start"))
 async def cmd_start(message: Message):
     await message.answer("Привет! Напиши /start_game чтобы начать игру.")
 
 
-# /start_game — включаем состояние и начинаем цикл
 @dp.message(Command("start_game"))
 async def cmd_start_game(message: Message, state: FSMContext):
     await state.set_state(GameState.playing)
     await next_round(message)
 
 
-# Обработка кнопок во время игры
 @dp.message(GameState.playing, F.text)
 async def handle_game_message(message: Message, state: FSMContext):
     await message.answer(f"Вы нажали на кнопку с числом {message.text}")
     await next_round(message)
 
 
-# /end_game — выходим из состояния
 @dp.message(Command("end_game"))
 async def cmd_end_game(message: Message, state: FSMContext):
     await state.clear()

@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     db_port: int = 5432
     db_name: str = "deva_p1_db"
 
-    redis_host: str = "redis"
+    redis_ip: str = "redis"
     redis_port: int = 6379
 
     minio_ip: str = "minio"
