@@ -1,93 +1,110 @@
 import asyncio
-import random
-from typing import Annotated
-from webbrowser import get
 
-from aiogram import Bot, Dispatcher, F
-from aiogram.enums import ParseMode
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from uuid import UUID
+
+from aiogram import Bot, Dispatcher, Router, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from sqlalchemy.ext.asyncio import AsyncSession
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, BufferedInputFile
 
-
-from bot.di_implementation import Container
 from config import settings
 from db.main import DatabaseSessionManager, get_db_url
-from db.models import Question
+from db.repositories.question_repository import QuestionRepository
+from db.s3 import get_s3_client
 
+session_manager = DatabaseSessionManager(
+    get_db_url(
+        settings.db_user,
+        settings.db_password,
+        "localhost",
+        settings.db_port,
+        settings.db_name
+    ), {"echo": False}
+)
 
-
-from config import settings
-from db.models.user import User
-from db.repositories.user_repository import UserRepository
-
-
-
-""" 
 class GameState(StatesGroup):
     playing = State()
-    creators_editing = State()
-    creating_content = State()
 
+async def send_question(target: types.Message | types.CallbackQuery, state: FSMContext):
+    async with session_manager.context_session() as session:
+        qr = QuestionRepository(session)
+        questions = await qr.get_random_questions(4)
+        question = questions[0]
 
-def generate_keyboard(question: Question) -> ReplyKeyboardMarkup:
-
-    buttons_count = question.answers_count + 1
-    numbers = random.sample(range(1, 101), buttons_count)
-    buttons = [[KeyboardButton(text=str(num))] for num in numbers]
-
-    return ReplyKeyboardMarkup(
-        keyboard=buttons,
-        resize_keyboard=True,
-        one_time_keyboard=True
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=item.file.answer, callback_data=f"answer:{item.id}")]
+            for item in questions
+        ]
     )
+    caption = "Что за фильм?"
 
-
-async def next_round(message: Message):
-    number = random.randint(1, 10)
-    keyboard = generate_keyboard()
-    await message.answer(
-        f"🎲 Случайное число: <b>{number}</b>\nВыберите одно из чисел ниже:",
-        parse_mode=ParseMode.HTML,
-        reply_markup=keyboard
+    minio_client = get_s3_client()
+    obj = minio_client.get_object(
+        bucket_name=settings.minio_bucket,
+        object_name=str(question.file.id)
     )
+    data = obj.read()
+    obj.close()
+    input_file = BufferedInputFile(data, filename=f"{question.file.id}")
 
+    media_type = question.file.file_type.split("/")[0]
+    if isinstance(target, types.CallbackQuery):
+        send_target = target.message
+    else:
+        send_target = target
 
-@dp.message(Command("start"))
-async def cmd_start(message: Message):
-    await message.answer("Привет! Напиши /start_game чтобы начать игру.")
+    if media_type == "image":
+        await send_target.answer_photo(photo=input_file, caption=caption, reply_markup=keyboard)
+    elif media_type == "video":
+        await send_target.answer_video(video=input_file, caption=caption, reply_markup=keyboard)
+    elif media_type == "audio":
+        await send_target.answer_audio(audio=input_file, caption=caption, reply_markup=keyboard)
+    else:
+        await send_target.answer(caption)
 
+    await state.update_data(question_id=question.id)
 
-@dp.message(Command("start_game"))
-async def cmd_start_game(message: Message, state: FSMContext):
+router = Router()
+
+@router.message(Command("start"))
+async def cmd_start(message: types.Message):
+    await message.answer("Привет! Напиши /start_game, чтобы начать игру.")
+
+@router.message(Command("start_game"))
+async def cmd_start_game(message: types.Message, state: FSMContext):
     await state.set_state(GameState.playing)
-    await next_round(message)
+    await send_question(message, state)
 
+@router.callback_query(lambda c: c.data and c.data.startswith("answer:"))
+async def handle_answer(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
 
-@dp.message(GameState.playing, F.text)
-async def handle_game_message(message: Message, state: FSMContext):
-    await message.answer(f"Вы нажали на кнопку с числом {message.text}")
-    await next_round(message)
+    data = await state.get_data()
+    correct_id = data.get("question_id")
+    if correct_id is None:
+        await callback.message.answer("Что-то пошло не так — текущий вопрос не найден.")
+        return
 
+    selected_id = UUID(callback.data.split(":", 1)[1])
 
-@dp.message(Command("end_game"))
-async def cmd_end_game(message: Message, state: FSMContext):
-    await state.clear()
-    await message.answer("Игра завершена!", reply_markup=ReplyKeyboardRemove()) """
+    async with session_manager.context_session() as session:
+        qr = QuestionRepository(session)
+        correct_question = await qr.get_by_id(correct_id)
 
+    if selected_id == correct_id:
+        await callback.message.answer("✅ Правильно!")
+    else:
+        await callback.message.answer(f"❌ Неверно! Правильный ответ: {correct_question.file.answer}")
+
+    await send_question(callback, state)
 
 async def main():
-    container = Container()
-
     bot = Bot(token=settings.tg_bot_token)
     dp = Dispatcher()
-
-    container.wire(modules=[__name__, "handlers"])
-
+    dp.include_router(router)
     await dp.start_polling(bot)
-
 
 if __name__ == "__main__":
     asyncio.run(main())

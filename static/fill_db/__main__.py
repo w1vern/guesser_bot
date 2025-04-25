@@ -7,11 +7,9 @@ import mimetypes
 from minio import Minio
 
 from db.repositories import FileRepository, QuestionRepository, UserRepository
-from sqlalchemy.ext.asyncio import AsyncSession
 from config import settings
 
 from db.main import DatabaseSessionManager, get_db_url
-from db.s3 import get_s3_client
 
 
 directory_path = './content/'
@@ -31,7 +29,9 @@ async def main():
         ur = UserRepository(session)
         fr = FileRepository(session)
         qr = QuestionRepository(session)
-        user = await ur.create(tg_id=settings.tg_admin_id, admin=True, creator=True)
+        user = await ur.get_by_tg_id(settings.tg_admin_id)
+        if user is None:
+            user = await ur.create(tg_id=settings.tg_admin_id, admin=True, creator=True)
         if user is None:
             raise Exception("Admin user not created")
         for entry in os.listdir(directory_path):

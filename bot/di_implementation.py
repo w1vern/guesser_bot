@@ -1,4 +1,4 @@
-
+""" 
 from dependency_injector import containers, providers
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,19 +13,12 @@ from aiogram.types import Message
 from typing import Optional
 
 
-async def get_user(message: Message, session: AsyncSession) -> Optional[User]:
-    if message.from_user is None:
-        return None
-    repo = UserRepository(session)
-    user = await repo.get_by_tg_id(str(message.from_user.id))
-    if user is None:
-        user = await repo.create(tg_id=str(message.from_user.id))
-    return user
+
 
 
 class Container(containers.DeclarativeContainer):
     wiring_config = containers.WiringConfiguration(
-        packages=["bot.handlers"]
+        packages=["bot"]
     )
 
     config = providers.Configuration()
@@ -58,3 +51,4 @@ class Container(containers.DeclarativeContainer):
         get_user,
         session=db_session,
     )
+ """

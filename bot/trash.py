@@ -1,49 +1,66 @@
-from datetime import timedelta
-from aiogram import Router, types
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
-from aiogram.filters import Command
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
-from dependency_injector.wiring import inject, Provide
-from minio import Minio
-from sqlalchemy.ext.asyncio import AsyncSession
-import random
 
-from bot.di_implementation import Container as C
-from db.repositories.question_repository import QuestionRepository
-from config import settings
 
-router = Router()
-
+""" 
 class GameState(StatesGroup):
     playing = State()
+    creators_editing = State()
+    creating_content = State()
 
-@router.message(Command("start_game"))
-@inject
-async def cmd_start_game(
-    message: types.Message,
-    state: FSMContext,
-    session: AsyncSession = Provide[C.db_session]
-):
-    """
-    Обработчик команды /start_game: переводит в состояние игры и отправляет первый вопрос.
-    """
+
+def generate_keyboard(question: Question) -> ReplyKeyboardMarkup:
+
+    buttons_count = question.answers_count + 1
+    numbers = random.sample(range(1, 101), buttons_count)
+    buttons = [[KeyboardButton(text=str(num))] for num in numbers]
+
+    return ReplyKeyboardMarkup(
+        keyboard=buttons,
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
+
+
+async def next_round(message: Message):
+    number = random.randint(1, 10)
+    keyboard = generate_keyboard()
+    await message.answer(
+        f"🎲 Случайное число: <b>{number}</b>\nВыберите одно из чисел ниже:",
+        parse_mode=ParseMode.HTML,
+        reply_markup=keyboard
+    )
+
+
+@dp.message(Command("start"))
+async def cmd_start(message: Message):
+    await message.answer("Привет! Напиши /start_game чтобы начать игру.")
+
+
+@dp.message(Command("start_game"))
+async def cmd_start_game(message: Message, state: FSMContext):
     await state.set_state(GameState.playing)
-    # Инициализируем список уже заданных вопросов
-    await state.update_data(asked=[])
-    # Отправляем первый вопрос
-    await send_question(message, state)
+    await next_round(message)
 
-@inject
+
+@dp.message(GameState.playing, F.text)
+async def handle_game_message(message: Message, state: FSMContext):
+    await message.answer(f"Вы нажали на кнопку с числом {message.text}")
+    await next_round(message)
+
+
+@dp.message(Command("end_game"))
+async def cmd_end_game(message: Message, state: FSMContext):
+    await state.clear()
+    await message.answer("Игра завершена!", reply_markup=ReplyKeyboardRemove()) """
+
+""" @inject
 async def send_question(
     message: types.Message,
     state: FSMContext,
     session: AsyncSession = Provide[C.db_session],
     minio_client: Minio = Provide[C.minio_client]
 ):
-    """
+
     Функция для отправки одного вопроса с четырьмя вариантами ответа.
-    """
     qr = QuestionRepository(session)
 
     # Получаем новый вопрос, исключая уже заданные
@@ -82,16 +99,9 @@ async def send_question(
     # Сохраняем в состоянии текущий вопрос и обновляем список заданных
     await state.update_data(question_id=question.id)
 
-@router.callback_query(lambda c: c.data and c.data.startswith("answer:"))
-@inject
-async def handle_answer(
-    callback: CallbackQuery,
-    state: FSMContext,
-    session: AsyncSession = Provide[C.db_session]
-):
-    """
+
     Обработчик ответа пользователя: проверяет правильность и отправляет следующий вопрос.
-    """
+
     # Подтверждаем обработку callback, чтобы убрать «часики» у пользователя
     await callback.answer()
 
@@ -110,5 +120,6 @@ async def handle_answer(
 
     # Отправляем результат и следующий вопрос
     await callback.message.answer(result_text)
-    await send_question(callback.message, state)
+    await send_question(callback.message, state) """
+
 
