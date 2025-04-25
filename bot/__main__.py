@@ -17,7 +17,7 @@ session_manager = DatabaseSessionManager(
     get_db_url(
         settings.db_user,
         settings.db_password,
-        "localhost",
+        settings.db_ip,
         settings.db_port,
         settings.db_name
     ), {"echo": False}

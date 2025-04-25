@@ -20,4 +20,4 @@ FROM base as production
 
 RUN poetry install --no-interaction --no-ansi --only main
 
-CMD ["poetry", "run", "-m", "bot"]
+CMD ["poetry", "run", "python", "-m", "bot"]

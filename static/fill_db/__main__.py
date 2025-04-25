@@ -17,10 +17,10 @@ directory_path = './content/'
 
 async def main():
     DB_URL = get_db_url(settings.db_user, settings.db_password,
-                        "localhost", settings.db_port, settings.db_name)
+                        settings.db_ip, settings.db_port, settings.db_name)
     session_manager = DatabaseSessionManager(DB_URL, {"echo": False})
     minio_client = Minio(
-        endpoint=f"localhost:{settings.minio_port}",
+        endpoint=f"{settings.minio_ip}:{settings.minio_port}",
         access_key=settings.minio_access_key,
         secret_key=settings.minio_secret_key,
         secure=settings.minio_secure

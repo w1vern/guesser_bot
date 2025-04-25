@@ -5,6 +5,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
 
+    model_config = SettingsConfigDict(env_file=f"{os.getenv('TARGET', 'dev')}.env")
+
     tg_bot_token: str = ""
     tg_admin_id: str = ""
         
@@ -23,10 +25,9 @@ class Settings(BaseSettings):
     minio_secret_key: str = "NINIO_SECRET_KEY"
     minio_bucket: str = "my-bucket"
     minio_secure: bool = False
+    minio_user: str = "minioadmin"
+    minio_password: str = "minioadmin"
 
-    class Config:
-        env_file = f"{os.getenv('TARGET', '')}.env"
-        extra = "allow"
     
 
 settings = Settings()
