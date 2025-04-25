@@ -25,7 +25,7 @@ async def get_user(message: Message, session: AsyncSession) -> Optional[User]:
 
 class Container(containers.DeclarativeContainer):
     wiring_config = containers.WiringConfiguration(
-        packages=[]
+        packages=["bot.handlers"]
     )
 
     config = providers.Configuration()

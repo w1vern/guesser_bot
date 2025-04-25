@@ -12,7 +12,7 @@ from aiogram.fsm.state import State, StatesGroup
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
-from di.di_implementation import Container
+from bot.di_implementation import Container
 from config import settings
 from db.main import DatabaseSessionManager, get_db_url
 from db.models import Question
