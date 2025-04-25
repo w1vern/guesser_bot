@@ -1,20 +1,24 @@
-[project]
+[tool.poetry]
 name = "guesser-bot"
 version = "0.1.0"
-description = "Add your description here"
+description = ""
+authors = ["w1vern <bndvvl@gmail.com>"]
 readme = "README.md"
-requires-python = ">=3.12"
-dependencies = [
-    "aiogram>=3.20.0.post0",
-    "alembic>=1.15.2",
-    "asyncpg>=0.30.0",
-    "dependency-injector>=4.46.0",
-    "pydantic-settings>=2.9.1",
-    "redis>=5.2.1",
-    "sqlalchemy>=2.0.40",
-]
 
-[dependency-groups]
-dev = [
-    "isort>=6.0.1",
-]
+[tool.poetry.dependencies]
+python = "^3.12"
+asyncpg = "^0.30.0"
+sqlalchemy = "^2.0.40"
+minio = "^7.2.15"
+redis = "^5.2.1"
+aiogram = "^3.20.0.post0"
+dependency-injector = "^4.46.0"
+isort = "^6.0.1"
+alembic = "^1.15.2"
+pydantic = "^2.11.3"
+pydantic-settings = "^2.9.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

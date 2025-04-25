@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     db_password: str = "1234"
     db_ip: str = "postgres"
     db_port: int = 5432
-    db_name: str = "deva_p1_db"
+    db_name: str = "guesser_bot_db"
 
     redis_ip: str = "redis"
     redis_port: int = 6379

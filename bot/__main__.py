@@ -1,70 +1,31 @@
 import asyncio
 import random
 from typing import Annotated
+from webbrowser import get
 
-from aiogram import Bot, Dispatcher, F, types
+from aiogram import Bot, Dispatcher, F
 from aiogram.enums import ParseMode
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from sqlalchemy.ext.asyncio import AsyncSession
-from dependency_injector import containers, providers
-from dependency_injector.wiring import Provide, inject
 
+
+from di.di_implementation import Container
 from config import settings
 from db.main import DatabaseSessionManager, get_db_url
 from db.models import Question
 
-from enum import Enum
 
-from redis.asyncio import Redis
 
 from config import settings
+from db.models.user import User
+from db.repositories.user_repository import UserRepository
 
 
-class RedisType(str, Enum):
-    pass
 
-
-def get_redis_client() -> Redis:
-    return Redis(host=settings.redis_ip,
-                 port=settings.redis_port,
-                 db=0,
-                 decode_responses=True)
-
-DB_URL = get_db_url(user=settings.db_user,
-                    password=settings.db_password,
-                    ip=settings.db_ip,
-                    port=settings.db_port,
-                    name=settings.db_name
-                    )
-
-
-class Container(containers.DeclarativeContainer):
-    wiring_config = containers.WiringConfiguration(packages=["handlers"])
-
-    config = providers.Configuration()
-    db_session_manager = providers.Singleton(
-        DatabaseSessionManager,
-        host=DB_URL,
-        engine_kwargs={"echo": True}
-    )
-
-    db_session = providers.Resource(
-        lambda db_manager: db_manager.session(),
-        db_manager=db_session_manager,
-    )
-
-
-Session: Annotated[AsyncSession, Provide[Container.db_session]]
-
-
-dp = Dispatcher()
-
-async def get_user(message: types.Message, session: AsyncSession = types.Dependency(session_ma) ):
-
-
+""" 
 class GameState(StatesGroup):
     playing = State()
     creators_editing = State()
@@ -82,7 +43,6 @@ def generate_keyboard(question: Question) -> ReplyKeyboardMarkup:
         resize_keyboard=True,
         one_time_keyboard=True
     )
-
 
 
 async def next_round(message: Message):
@@ -115,11 +75,17 @@ async def handle_game_message(message: Message, state: FSMContext):
 @dp.message(Command("end_game"))
 async def cmd_end_game(message: Message, state: FSMContext):
     await state.clear()
-    await message.answer("Игра завершена!", reply_markup=ReplyKeyboardRemove())
+    await message.answer("Игра завершена!", reply_markup=ReplyKeyboardRemove()) """
 
 
 async def main():
+    container = Container()
+
     bot = Bot(token=settings.tg_bot_token)
+    dp = Dispatcher()
+
+    container.wire(modules=[__name__, "handlers"])
+
     await dp.start_polling(bot)
 
 

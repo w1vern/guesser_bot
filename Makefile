@@ -2,7 +2,7 @@
 .PHONY: back
 
 bot:
-	set TARGET=dev&& python -m bot
+	python -m bot
 
 postgres:
 	docker start PostgreSQL
@@ -24,7 +24,7 @@ minio:
 	docker start Minio
 
 gen_migration:
-	set TARGET=dev&& alembic revision --autogenerate -m "first migration"
+	alembic revision --autogenerate -m "first migration"
 
 migration:
 	alembic upgrade head
