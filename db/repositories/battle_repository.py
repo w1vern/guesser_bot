@@ -10,7 +10,8 @@ from db.models import User, Question, Battle
 class RankChangeFunction(Protocol):
     def __call__(self,
                  user_rank: float,
-                 question_rank: float
+                 question_rank: float,
+                 result: bool
                  ) -> tuple[float, float]:
         ...
 
@@ -25,7 +26,7 @@ class BattleRepository:
                      result: bool,
                      rank_change_function: RankChangeFunction
                      ) -> Optional[Battle]:
-        user_change, question_change = rank_change_function(user.rank, question.rank)
+        user_change, question_change = rank_change_function(user.rank, question.rank, result)
         battle = Battle(user_id=user.id,
                         question_id=question.id,
                         user_rank=user.rank,
