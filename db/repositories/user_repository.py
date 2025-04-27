@@ -12,7 +12,7 @@ class UserRepository:
         self.session = session
 
     async def create(self,
-                     tg_id: str,
+                     tg_id: int,
                      rank: float = 0.5,
                      admin: bool = False,
                      creator: bool = False
@@ -29,7 +29,7 @@ class UserRepository:
         stmt = select(User).where(User.id == user_id)
         return await self.session.scalar(stmt)
     
-    async def get_by_tg_id(self, tg_id: str) -> Optional[User]:
+    async def get_by_tg_id(self, tg_id: int) -> Optional[User]:
         stmt = select(User).where(User.tg_id == tg_id)
         return await self.session.scalar(stmt)
     
