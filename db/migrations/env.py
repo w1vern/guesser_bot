@@ -8,9 +8,9 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from config import settings
 from db.models import *
+from db.main import get_db_url
 
-DATABASE_URL = f"postgresql+asyncpg://{settings.db_user}:{settings.db_password}@{settings.db_ip}:{settings.db_port}/{settings.db_name}"
-print(DATABASE_URL)
+DATABASE_URL = get_db_url(settings.db_user, settings.db_password, settings.db_ip, settings.db_port, settings.db_name)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

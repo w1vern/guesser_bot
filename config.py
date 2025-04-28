@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=f"{os.getenv('TARGET', 'dev')}.env")
 
     tg_bot_token: str = ""
-    tg_admin_id: str = ""
+    tg_admin_id: int = 0
         
     db_user: str = "postgres"
     db_password: str = "1234"
@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     minio_ip: str = "minio"
     minio_port: int = 9000
     minio_access_key: str = "MINIO_ACCESS_KEY"
-    minio_secret_key: str = "NINIO_SECRET_KEY"
+    minio_secret_key: str = "MINIO_SECRET_KEY"
     minio_bucket: str = "my-bucket"
     minio_secure: bool = False
     minio_user: str = "minioadmin"
@@ -31,3 +31,4 @@ class Settings(BaseSettings):
     
 
 settings = Settings()
+print(settings.minio_ip)

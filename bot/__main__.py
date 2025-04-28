@@ -43,11 +43,11 @@ async def register_user(tg_id: int, session: AsyncSession) -> User:
 
 session_manager = DatabaseSessionManager(
     get_db_url(
-        settings.db_user,
-        settings.db_password,
-        settings.db_ip,
-        settings.db_port,
-        settings.db_name
+        user=settings.db_user,
+        password=settings.db_password,
+        ip=settings.db_ip,
+        port=settings.db_port,
+        name=settings.db_name
     ), {"echo": False}
 )
 

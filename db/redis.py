@@ -1,7 +1,15 @@
 
 from enum import Enum
-from redis.asyncio import Redis
+
 from config import settings
+
+
+use_fake_redis = False
+if use_fake_redis:
+    from fakeredis.aioredis import FakeRedis as Redis
+else:
+    from redis.asyncio import Redis
+
 
 
 class RedisType(str, Enum):

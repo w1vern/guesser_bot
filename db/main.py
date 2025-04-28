@@ -60,8 +60,12 @@ class DatabaseSessionManager:
             await conn.run_sync(Base.metadata.create_all)
 
 
-def get_db_url(user: str, password: str, ip: str, port: int, name: str) -> str:
+def get_db_postgres_url(user: str, password: str, ip: str, port: int, name: str) -> str:
     return f"postgresql+asyncpg://{user}:{password}@{ip}:{port}/{name}"
 
+def get_db_sqlite_url(user: str, password: str, ip: str, port: int, name: str) -> str:
+    return f"sqlite+aiosqlite:///{name}.db"
+
+get_db_url = get_db_postgres_url
 
 # session_manager = DatabaseSessionManager(DATABASE_URL, {"echo": False})
