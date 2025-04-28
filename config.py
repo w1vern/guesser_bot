@@ -28,7 +28,8 @@ class Settings(BaseSettings):
     minio_user: str = "minioadmin"
     minio_password: str = "minioadmin"
 
+    compose_profiles: str = ""
+
     
 
 settings = Settings()
-print(settings.minio_ip)

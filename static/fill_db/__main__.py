@@ -49,8 +49,6 @@ async def main():
                 minio_client.fput_object(settings.minio_bucket, str(
                     db_file.id), full_path, mime_type)
                 q = await qr.create(file=db_file, creator=user, answers_count=4, rank=0.5)
-        await session.commit()
-
 
 if __name__ == "__main__":
     asyncio.run(main())

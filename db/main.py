@@ -52,7 +52,6 @@ class DatabaseSessionManager:
     async def context_session(self) -> AsyncIterator[AsyncSession]:
         async for session in self.session():
             yield session
-            break
 
 
     async def create_db_and_tables(self):

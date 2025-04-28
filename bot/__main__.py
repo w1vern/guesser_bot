@@ -67,7 +67,7 @@ async def cmd_start(message: types.Message):
         if not message.from_user:
             raise Exception("something 4")
         user = await get_user(message.from_user.id, session)
-    await message.answer(f"hello, your rank: {user.rank}")
+        await message.answer(f"hello, your rank: {user.rank}")
 
 
 @router.message(Command("start_game"))
@@ -147,20 +147,23 @@ async def handle_answer(callback: CallbackQuery, state: FSMContext):
 
     selected_id = UUID(callback.data.split(":", 1)[1])
 
-    session = session_manager.session()
-
     async with session_manager.context_session() as session:
         user = await get_user(callback.from_user.id, session)
         qr = QuestionRepository(session)
         correct_answer = await qr.get_by_id(correct_id)
         if correct_answer is None:
             raise Exception("Correct question not found")
+        ur = UserRepository(session)
         br = BattleRepository(session)
         if user is None:
             raise Exception("User not found")
 
         res = selected_id == correct_id
         battle = await br.create(user, correct_answer, res, change_rank)
+        if not battle:
+            raise Exception("something 10")
+        await ur.change_rank(user, battle.user_change)
+        await qr.change_rank(correct_answer, battle.question_change)
         if not battle:
             raise Exception("something 8")
 
