@@ -30,21 +30,17 @@ class QuestionRepository:
     async def get_by_id(self, question_id: UUID) -> Optional[Question]:
         stmt = select(Question).where(Question.id == question_id)
         return await self.session.scalar(stmt)
-    
+
     async def get_random_question(self) -> Question | None:
         stmt = select(Question).order_by(func.random()).limit(1)
         return await self.session.scalar(stmt)
 
+    #TODO: trouble with ans multiplying because file type
     async def get_random_questions(self, count: int, exclude: list[Question] = []) -> list[Question]:
-        res = []
-        while True:
-            stmt = select(Question).order_by(func.random()).limit(count*2)
-            tmp = list((await self.session.scalars(stmt)).all())
-            for _ in tmp:
-                if _ not in res and _ not in exclude:
-                    res.append(_)
-                if len(res) == count:
-                    return res
+        exclude_answers = [q.answer for q in exclude]
+        stmt = select(Question).where(Question.answer.not_in(
+            exclude_answers)).order_by(func.random()).limit(count)
+        return list((await self.session.scalars(stmt)).all())
 
     async def get_by_creator(self, creator: User) -> Optional[Question]:
         stmt = select(Question).where(Question.creator_id == creator.id)

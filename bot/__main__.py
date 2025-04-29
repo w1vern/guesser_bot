@@ -1,5 +1,6 @@
 import asyncio
 
+import math
 from uuid import UUID
 
 from aiogram import Bot, Dispatcher, Router, types
@@ -17,10 +18,22 @@ from db.repositories.battle_repository import BattleRepository
 from db.repositories.question_repository import QuestionRepository
 from db.repositories.user_repository import UserRepository
 from db.s3 import get_s3_client
+import math
+from typing import Tuple
 
+def change_rank(user_rank: float, question_rank: float, result: bool) -> Tuple[float, float]:
+    k = 5.0
+    alpha = 0.1
 
-def change_rank(user_rank: float, question_rank: float, result: bool) -> tuple[float, float]:
-    return ((0.01, -0.01) if result else (-0.01, 0.01))
+    p_user = 1 / (1 + math.exp(k * (question_rank - user_rank)))
+
+    tmp = int(result)
+
+    user_diff = alpha * (tmp - p_user) * user_rank * (1 - user_rank)
+    question_diff = alpha * (p_user - tmp) * question_rank * (1 - question_rank)
+
+    return user_diff, question_diff
+
 
 
 async def get_user(tg_id: int, session: AsyncSession) -> User:
@@ -29,6 +42,9 @@ async def get_user(tg_id: int, session: AsyncSession) -> User:
     if user:
         return user
     raise Exception("something 3")
+
+def convert_rank(rank: float) -> int:
+    return int(rank*1000)
 
 
 async def register_user(tg_id: int, session: AsyncSession) -> User:
@@ -126,7 +142,7 @@ async def send_question(target: types.Message | types.CallbackQuery, state: FSMC
             await send_target.answer_video(video=input_file, caption=caption, reply_markup=keyboard)
 
         case "audio":
-            await send_target.answer_audio(audio=input_file, caption=caption, reply_markup=keyboard)
+            await send_target.answer_voice(voice=input_file, caption=caption, reply_markup=keyboard)
         case _:
             send_target.answer("internal server error")
 
@@ -168,9 +184,9 @@ async def handle_answer(callback: CallbackQuery, state: FSMContext):
             raise Exception("something 8")
 
         if res:
-            await callback.message.answer(f"✅ Right! Rank change: +{battle.user_change} (now {battle.user_change + battle.user_rank})")
+            await callback.message.answer(f"✅ Right! Rank change: +{convert_rank(battle.user_change)} (now {convert_rank(battle.user_change + battle.user_rank)})")
         else:
-            await callback.message.answer(f"❌ Wrong! The right answer is {correct_answer.file.answer}. Rank change: {battle.user_change} (now {battle.user_change + battle.user_rank})")
+            await callback.message.answer(f"❌ Wrong! The right answer is {correct_answer.file.answer}. Rank change: {convert_rank(battle.user_change)} (now {convert_rank(battle.user_change + battle.user_rank)})")
 
     await send_question(callback, state)
 

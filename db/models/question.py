@@ -17,6 +17,7 @@ class Question(Base):
     __tablename__ = "questions"
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     
+    answer: Mapped[str]
     answers_count: Mapped[int]
     rank: Mapped[float]
 
