@@ -4,25 +4,29 @@ import asyncio
 
 from enum import Enum
 import math
+import random
 from uuid import UUID
 
 from aiogram import Bot, Dispatcher, Router, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, BufferedInputFile, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import BufferedInputFile, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
 from db.main import DatabaseSessionManager, get_db_url
+from db.models.question import Question
 from db.models.user import User
+from db.redis import get_redis_client
 from db.repositories.battle_repository import BattleRepository
 from db.repositories.question_repository import QuestionRepository
 from db.repositories.user_repository import UserRepository
 from db.s3 import get_s3_client
-import math
 from typing import Protocol, Tuple
+
+print(settings.tg_bot_token)
 
 
 def change_rank(user_rank: float, question_rank: float, result: bool) -> Tuple[float, float]:
@@ -72,6 +76,7 @@ session_manager = DatabaseSessionManager(
     ), {"echo": False}
 )
 
+
 class StaticButton():
     def __init__(self, text: str, only_for_admin: bool = False, only_for_creator: bool = False) -> None:
         self.text = text
@@ -82,26 +87,16 @@ class StaticButton():
     only_for_admin: bool
     only_for_creator: bool
 
+
 class StaticButtons:
     start_game = StaticButton("start game")
     end_game = StaticButton("end game")
     settings = StaticButton("settings")
     content = StaticButton("content", only_for_creator=True)
-    creators = StaticButton("content", only_for_admin=True)
+    creators = StaticButton("creators", only_for_admin=True)
     main_menu = StaticButton("back to main menu")
+    todo_note = StaticButton("need more buttons there")
 
-
-
-""" class Dirs(str, Enum):
-    main_menu = "main_menu"
-    settings = "settings"
-    play = "play"
-    creators = "creators"
-    content = "content"
-
-static_buttons = {
-    Dirs.main_menu.value: ["start game", "settings"],
-} """
 
 router = Router()
 
@@ -122,27 +117,30 @@ class GetKeyboardSizeFunction(Protocol):
 
 
 def get_keyboard_size(values: list[str]) -> list[int]:
+    in_a_row = 4
     length = len(values)
     res = []
-    for i in range(4, length, 4):
+    for i in range(in_a_row, length + 1, in_a_row):
         res.append(4)
-    res.append(length % 4)
+    if length % in_a_row:
+        res.append(length % in_a_row)
     return res
 
 
 def create_keyboard(values: list[str], keyboard_size: GetKeyboardSizeFunction = get_keyboard_size) -> ReplyKeyboardMarkup:
     markup = keyboard_size(values)
-    keyboard = []
+    keyboard: list[list[KeyboardButton]] = []
     index = 0
-    for i in range(len(values)):
+    for i in range(len(markup)):
+        keyboard.append([])
         for j in range(markup[i]):
-            keyboard.append(KeyboardButton(text=values[index]))
+            keyboard[i].append(KeyboardButton(text=values[index]))
             index += 1
 
-    return ReplyKeyboardMarkup(keyboard=keyboard)
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True, input_field_placeholder="guess")
 
 
-async def send_question(target: types.Message | types.CallbackQuery, state: FSMContext):
+async def send_question(target: types.Message, state: FSMContext):
     async with session_manager.context_session() as session:
         qr = QuestionRepository(session)
         current_question = await qr.get_random_question()
@@ -151,13 +149,7 @@ async def send_question(target: types.Message | types.CallbackQuery, state: FSMC
         questions = await qr.get_random_questions(current_question.answers_count - 1, [current_question])
         questions.append(current_question)
 
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=item.file.answer,
-                                  callback_data=f"answer:{item.id}")]
-            for item in questions
-        ]
-    )
+    keyboard = game_keyboard(questions)
     caption = "Guess the film?"
 
     minio_client = get_s3_client()
@@ -171,76 +163,203 @@ async def send_question(target: types.Message | types.CallbackQuery, state: FSMC
         data, filename=f"{current_question.file.id}")
 
     media_type = current_question.file.file_type.split("/")[0]
-    if isinstance(target, types.CallbackQuery):
-        send_target = target.message
-    else:
-        send_target = target
 
-    if not send_target:
+    if not target:
         raise Exception("something 1")
 
     match media_type:
         case "image":
-            await send_target.answer_photo(photo=input_file, caption=caption, reply_markup=keyboard)
+            await target.answer_photo(photo=input_file, caption=caption, reply_markup=keyboard)
 
         case "video":
-            await send_target.answer_video(video=input_file, caption=caption, reply_markup=keyboard)
+            await target.answer_video(video=input_file, caption=caption, reply_markup=keyboard)
 
         case "audio":
-            await send_target.answer_voice(voice=input_file, caption=caption, reply_markup=keyboard)
+            await target.answer_voice(voice=input_file, caption=caption, reply_markup=keyboard)
         case _:
-            send_target.answer("internal server error")
+            target.answer("internal server error")
 
     await state.update_data(question_id=current_question.id)
 
 
+def main_menu_keyboard(user: User) -> ReplyKeyboardMarkup:
+    values = []
+    values.append(StaticButtons.start_game.text)
+    values.append(StaticButtons.settings.text)
+    if user.admin:
+        values.append(StaticButtons.creators.text)
+    if user.creator:
+        values.append(StaticButtons.content.text)
+    return create_keyboard(values)
+
+
+def game_keyboard(questions: list[Question]) -> ReplyKeyboardMarkup:
+    values = []
+    for q in questions:
+        values.append(q.answer)
+    random.shuffle(values)
+    values.append(StaticButtons.end_game.text)
+    return create_keyboard(values)
+
+
+def settings_keyboard(user: User) -> ReplyKeyboardMarkup:
+    return create_keyboard([StaticButtons.todo_note.text, StaticButtons.main_menu.text])
+
+
+def content_keyboard(user: User) -> ReplyKeyboardMarkup:
+    return create_keyboard([StaticButtons.todo_note.text, StaticButtons.main_menu.text])
+
+
+def creators_keyboard(user: User) -> ReplyKeyboardMarkup:
+    return create_keyboard([StaticButtons.todo_note.text, StaticButtons.main_menu.text])
+
+
+async def start_game(target: types.Message, state: FSMContext) -> None:
+    await state.set_state(AppState.play)
+    await send_question(target, state)
+
+
+async def end_game(target: types.Message, state: FSMContext, user: User) -> None:
+    await to_main_menu(target, state, user)
+
+
+async def to_main_menu(target: types.Message, state: FSMContext, user: User) -> None:
+    await state.set_state(AppState.main_menu)
+    await target.answer(text="use keyboard", reply_markup=main_menu_keyboard(user))
+
+
+async def need_more_buttons_note(target: types.Message) -> None:
+    await target.answer(text="chose another button")
+
+
+async def edit_settings(target: types.Message, state: FSMContext, user: User) -> None:
+    await state.set_state(AppState.settings)
+    await target.answer(text="use keyboard", reply_markup=settings_keyboard(user))
+
+
+async def edit_content(target: types.Message, state: FSMContext, user: User) -> None:
+    await state.set_state(AppState.content)
+    await target.answer(text="use keyboard", reply_markup=content_keyboard(user))
+
+
+async def edit_creators(target: types.Message, state: FSMContext, user: User) -> None:
+    await state.set_state(AppState.creators)
+    await target.answer(text="use keyboard", reply_markup=creators_keyboard(user))
+
+
+async def handle_answer(message: types.Message, state: FSMContext) -> None:
+    if not message.text or not message.from_user:
+        raise Exception("something 2")
+    data = await state.get_data()
+    correct_id = data.get("question_id")
+    if correct_id is None:
+        await message.answer("something went wrong")
+        return
+
+    async with session_manager.context_session() as session:
+        user = await get_user(message.from_user.id, session)
+        qr = QuestionRepository(session)
+        correct_answer = await qr.get_by_id(correct_id)
+        if correct_answer is None:
+            raise Exception("Correct question not found")
+        ur = UserRepository(session)
+        br = BattleRepository(session)
+        if user is None:
+            raise Exception("User not found")
+
+        res = message.text == correct_answer.answer
+        battle = await br.create(user, correct_answer, res, change_rank)
+        if not battle:
+            raise Exception("something 10")
+        await ur.change_rank(user, battle.user_change)
+        await qr.change_rank(correct_answer, battle.question_change)
+        if not battle:
+            raise Exception("something 8")
+
+        if res:
+            await message.answer(f"✅ Right! Rank change: +{convert_rank(battle.user_rank + battle.user_change) - convert_rank(battle.user_rank)} (now {convert_rank(battle.user_change + battle.user_rank)})")
+        else:
+            await message.answer(f"❌ Wrong! The right answer is {correct_answer.file.answer}. Rank change: {convert_rank(battle.user_rank + battle.user_change) - convert_rank(battle.user_rank)} (now {convert_rank(battle.user_change + battle.user_rank)})")
+
+    await send_question(message, state)
+
+
 @router.message(Command("start"))
-async def cmd_start(message: types.Message):
+async def cmd_start(message: types.Message, state: FSMContext):
     async with session_manager.context_session() as session:
         if not message.from_user:
             raise Exception("something 4")
         user = await get_user(message.from_user.id, session)
         await message.answer(f"hello, your rank: {user.rank}")
+        await state.set_state(AppState.main_menu)
+        await to_main_menu(message, state, user)
 
 
 @router.message()
 async def handle_button(message: types.Message, state: FSMContext):
     text = message.text
     current = await state.get_state()
+    if message.from_user is None:
+        raise Exception("something 13")
+    async with session_manager.context_session() as session:
+        ur = UserRepository(session)
+        user = await ur.get_by_tg_id(message.from_user.id)
+        if not user:
+            raise Exception("something 14")
 
-    match current:
-        case AppState.main_menu.state:
-            match text:
-                case StaticButtons.start_game.text:
-                    pass
-                case StaticButtons.settings.text:
-                    pass
-                case StaticButtons.content.text:
-                    pass
-                case StaticButtons.creators.text:
-                    pass
-                case _:
-                    pass
-        case AppState.play.state:
-            match text:
-                case StaticButtons.end_game.text:
-                    pass
+        match current:
+            case AppState.main_menu.state:
+                match text:
+                    case StaticButtons.start_game.text:
+                        await start_game(message, state)
+                    case StaticButtons.settings.text:
+                        await edit_settings(message, state, user)
+                    case StaticButtons.content.text:
+                        await edit_content(message, state, user)
+                    case StaticButtons.creators.text:
+                        await edit_creators(message, state, user)
+                    case _:
+                        raise Exception("something 12")
+            case AppState.play.state:
+                match text:
+                    case StaticButtons.end_game.text:
+                        await end_game(message, state, user)
 
-                case _:
-                    pass
-        case AppState.settings.state:
-            pass
-        case AppState.content.state:
-            pass
-        case AppState.creators.state:
-            pass
-        case _:
-            pass
+                    case _:
+                        await handle_answer(message, state)
+            case AppState.settings.state:
+                match text:
+                    case StaticButtons.main_menu.text:
+                        await to_main_menu(message, state, user)
+                    case StaticButtons.todo_note.text:
+                        await need_more_buttons_note(message)
+            case AppState.content.state:
+                match text:
+                    case StaticButtons.main_menu.text:
+                        await to_main_menu(message, state, user)
+                    case StaticButtons.todo_note.text:
+                        await need_more_buttons_note(message)
+            case AppState.creators.state:
+                match text:
+                    case StaticButtons.main_menu.text:
+                        await to_main_menu(message, state, user)
+                    case StaticButtons.todo_note.text:
+                        await need_more_buttons_note(message)
+            case _:
+                raise Exception("something 15")
 
 
 async def main():
     bot = Bot(token=settings.tg_bot_token)
     dp = Dispatcher()
+
+    @dp.startup()
+    async def on_startup() -> None:
+        await bot.send_message(settings.tg_admin_id, "bot startup")
+
+    @dp.shutdown()
+    async def on_shutdown() -> None:
+        await bot.send_message(settings.tg_admin_id, "bot shuting down", reply_markup=ReplyKeyboardRemove())
     dp.include_router(router)
     await dp.start_polling(bot)
 

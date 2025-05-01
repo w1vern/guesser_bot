@@ -22,6 +22,7 @@ class QuestionRepository:
             rank=rank,
             file_id=file.id,
             creator_id=creator.id,
+            answer=file.answer,
             answers_count=answers_count)
         self.session.add(question)
         await self.session.flush()

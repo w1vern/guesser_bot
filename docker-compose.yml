@@ -1,11 +1,4 @@
 services:
-  redis:
-    image: redis:7
-    container_name: redis-bot
-    volumes:
-      - redis_data:/data
-    networks:
-      - app-network
 
   alembic:
     build:
@@ -50,6 +43,7 @@ volumes:
   postgres_data:
   redis_data:
   minio_data:
+
 
 networks:
   app-network:
