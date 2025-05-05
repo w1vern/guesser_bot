@@ -1,11 +1,13 @@
 
 from uuid import UUID, uuid4
+
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
-from .user import User
 from .question import Question
+from .user import User
+
 
 class Battle(Base):
     __tablename__ = "battles"

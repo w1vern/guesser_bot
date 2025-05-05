@@ -7,8 +7,8 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from config import settings
-from db.models import *
 from db.main import get_db_url
+from db.models import *
 
 DATABASE_URL = get_db_url(settings.db_user, settings.db_password, settings.db_ip, settings.db_port, settings.db_name)
 

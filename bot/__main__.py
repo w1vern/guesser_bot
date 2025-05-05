@@ -1,32 +1,40 @@
 
 
 import asyncio
-
-from enum import Enum
 import math
 import random
-from uuid import UUID
+from typing import Annotated, Protocol, Tuple
 
 from aiogram import Bot, Dispatcher, Router, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import BufferedInputFile, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
-
+from aiogram.types import (BufferedInputFile, KeyboardButton,
+                           ReplyKeyboardMarkup, ReplyKeyboardRemove)
+from fast_depends import Depends, inject
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import settings
 from db.main import DatabaseSessionManager, get_db_url
 from db.models.question import Question
 from db.models.user import User
-from db.redis import get_redis_client
 from db.repositories.battle_repository import BattleRepository
 from db.repositories.question_repository import QuestionRepository
 from db.repositories.user_repository import UserRepository
 from db.s3 import get_s3_client
-from typing import Protocol, Tuple
 
-print(settings.tg_bot_token)
+
+session_manager = DatabaseSessionManager(
+    get_db_url(
+        user=settings.db_user,
+        password=settings.db_password,
+        ip=settings.db_ip,
+        port=settings.db_port,
+        name=settings.db_name
+    ), {"echo": False}
+)
+
+Session = Annotated[AsyncSession, Depends(session_manager.session)]
 
 
 def change_rank(user_rank: float, question_rank: float, result: bool) -> Tuple[float, float]:
@@ -44,37 +52,33 @@ def change_rank(user_rank: float, question_rank: float, result: bool) -> Tuple[f
     return user_diff, question_diff
 
 
-async def get_user(tg_id: int, session: AsyncSession) -> User:
-    ur = UserRepository(session)
-    user = await ur.get_by_tg_id(tg_id)
-    if user:
-        return user
-    raise Exception("something 3")
-
-
 def convert_rank(rank: float) -> int:
     return int(rank*1000)
 
 
-async def register_user(tg_id: int, session: AsyncSession) -> User:
+async def get_user(message: types.Message, session: Session) -> User:
+    if not message.from_user:
+        raise Exception("something 16")
     ur = UserRepository(session)
-    if await ur.get_by_tg_id(tg_id):
-        raise Exception("something 6")
-    user = await ur.create(tg_id)
+    user = await ur.get_by_tg_id(message.from_user.id)
+    if user:
+        return user
+    raise Exception("something 3")
+GetUser = Annotated[User, Depends(get_user)]
+
+
+async def register_user(message: types.Message, session: Session) -> User:
+    if not message.from_user:
+        raise Exception("something 16")
+    ur = UserRepository(session)
+    user = await ur.get_by_tg_id(message.from_user.id)
+    if user:
+        return user
+    user = await ur.create(message.from_user.id)
     if not user:
         raise Exception("something 7")
     return user
-
-
-session_manager = DatabaseSessionManager(
-    get_db_url(
-        user=settings.db_user,
-        password=settings.db_password,
-        ip=settings.db_ip,
-        port=settings.db_port,
-        name=settings.db_name
-    ), {"echo": False}
-)
+CreateUser = Annotated[User, Depends(register_user)]
 
 
 class StaticButton():
@@ -140,14 +144,13 @@ def create_keyboard(values: list[str], keyboard_size: GetKeyboardSizeFunction = 
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True, input_field_placeholder="guess")
 
 
-async def send_question(target: types.Message, state: FSMContext):
-    async with session_manager.context_session() as session:
-        qr = QuestionRepository(session)
-        current_question = await qr.get_random_question()
-        if not current_question:
-            raise Exception("something 5")
-        questions = await qr.get_random_questions(current_question.answers_count - 1, [current_question])
-        questions.append(current_question)
+async def send_question(target: types.Message, state: FSMContext, session: Session):
+    qr = QuestionRepository(session)
+    current_question = await qr.get_random_question()
+    if not current_question:
+        raise Exception("something 5")
+    questions = await qr.get_random_questions(current_question.answers_count - 1, [current_question])
+    questions.append(current_question)
 
     keyboard = game_keyboard(questions)
     caption = "Guess the film?"
@@ -214,9 +217,9 @@ def creators_keyboard(user: User) -> ReplyKeyboardMarkup:
     return create_keyboard([StaticButtons.todo_note.text, StaticButtons.main_menu.text])
 
 
-async def start_game(target: types.Message, state: FSMContext) -> None:
+async def start_game(target: types.Message, state: FSMContext, session: AsyncSession) -> None:
     await state.set_state(AppState.play)
-    await send_question(target, state)
+    await send_question(target, state, session)
 
 
 async def end_game(target: types.Message, state: FSMContext, user: User) -> None:
@@ -247,8 +250,8 @@ async def edit_creators(target: types.Message, state: FSMContext, user: User) ->
     await target.answer(text="use keyboard", reply_markup=creators_keyboard(user))
 
 
-async def handle_answer(message: types.Message, state: FSMContext) -> None:
-    if not message.text or not message.from_user:
+async def handle_answer(message: types.Message, state: FSMContext, user: User, session: AsyncSession) -> None:
+    if not message.text:
         raise Exception("something 2")
     data = await state.get_data()
     correct_id = data.get("question_id")
@@ -256,97 +259,83 @@ async def handle_answer(message: types.Message, state: FSMContext) -> None:
         await message.answer("something went wrong")
         return
 
-    async with session_manager.context_session() as session:
-        user = await get_user(message.from_user.id, session)
-        qr = QuestionRepository(session)
-        correct_answer = await qr.get_by_id(correct_id)
-        if correct_answer is None:
-            raise Exception("Correct question not found")
-        ur = UserRepository(session)
-        br = BattleRepository(session)
-        if user is None:
-            raise Exception("User not found")
+    qr = QuestionRepository(session)
+    correct_answer = await qr.get_by_id(correct_id)
+    if correct_answer is None:
+        raise Exception("Correct question not found")
+    ur = UserRepository(session)
+    br = BattleRepository(session)
 
-        res = message.text == correct_answer.answer
-        battle = await br.create(user, correct_answer, res, change_rank)
-        if not battle:
-            raise Exception("something 10")
-        await ur.change_rank(user, battle.user_change)
-        await qr.change_rank(correct_answer, battle.question_change)
-        if not battle:
-            raise Exception("something 8")
+    res = message.text == correct_answer.answer
+    battle = await br.create(user, correct_answer, res, change_rank)
+    if not battle:
+        raise Exception("something 10")
+    await ur.change_rank(user, battle.user_change)
+    await qr.change_rank(correct_answer, battle.question_change)
+    if not battle:
+        raise Exception("something 8")
 
-        if res:
-            await message.answer(f"✅ Right! Rank change: +{convert_rank(battle.user_rank + battle.user_change) - convert_rank(battle.user_rank)} (now {convert_rank(battle.user_change + battle.user_rank)})")
-        else:
-            await message.answer(f"❌ Wrong! The right answer is {correct_answer.file.answer}. Rank change: {convert_rank(battle.user_rank + battle.user_change) - convert_rank(battle.user_rank)} (now {convert_rank(battle.user_change + battle.user_rank)})")
+    if res:
+        await message.answer(f"✅ Right! Rank change: +{convert_rank(battle.user_rank + battle.user_change) - convert_rank(battle.user_rank)} (now {convert_rank(battle.user_change + battle.user_rank)})")
+    else:
+        await message.answer(f"❌ Wrong! The right answer is {correct_answer.file.answer}. Rank change: {convert_rank(battle.user_rank + battle.user_change) - convert_rank(battle.user_rank)} (now {convert_rank(battle.user_change + battle.user_rank)})")
 
-    await send_question(message, state)
+    await send_question(message, state, session)
 
 
 @router.message(Command("start"))
-async def cmd_start(message: types.Message, state: FSMContext):
-    async with session_manager.context_session() as session:
-        if not message.from_user:
-            raise Exception("something 4")
-        user = await get_user(message.from_user.id, session)
-        await message.answer(f"hello, your rank: {user.rank}")
-        await state.set_state(AppState.main_menu)
-        await to_main_menu(message, state, user)
+@inject
+async def cmd_start(message: types.Message, state: FSMContext, user: CreateUser):
+    await message.answer(f"hello, your rank: {user.rank}")
+    await to_main_menu(message, state, user)
 
 
 @router.message()
-async def handle_button(message: types.Message, state: FSMContext):
+@inject
+async def handle_button(message: types.Message, state: FSMContext, session: Session, user: GetUser):
     text = message.text
     current = await state.get_state()
-    if message.from_user is None:
-        raise Exception("something 13")
-    async with session_manager.context_session() as session:
-        ur = UserRepository(session)
-        user = await ur.get_by_tg_id(message.from_user.id)
-        if not user:
-            raise Exception("something 14")
 
-        match current:
-            case AppState.main_menu.state:
-                match text:
-                    case StaticButtons.start_game.text:
-                        await start_game(message, state)
-                    case StaticButtons.settings.text:
-                        await edit_settings(message, state, user)
-                    case StaticButtons.content.text:
-                        await edit_content(message, state, user)
-                    case StaticButtons.creators.text:
-                        await edit_creators(message, state, user)
-                    case _:
-                        raise Exception("something 12")
-            case AppState.play.state:
-                match text:
-                    case StaticButtons.end_game.text:
-                        await end_game(message, state, user)
+    match current:
+        case AppState.main_menu.state:
+            match text:
+                case StaticButtons.start_game.text:
+                    await start_game(message, state, session)
+                case StaticButtons.settings.text:
+                    await edit_settings(message, state, user)
+                case StaticButtons.content.text:
+                    await edit_content(message, state, user)
+                case StaticButtons.creators.text:
+                    await edit_creators(message, state, user)
+                case _:
+                    raise Exception("something 12")
+        case AppState.play.state:
+            match text:
+                case StaticButtons.end_game.text:
+                    await end_game(message, state, user)
 
-                    case _:
-                        await handle_answer(message, state)
-            case AppState.settings.state:
-                match text:
-                    case StaticButtons.main_menu.text:
-                        await to_main_menu(message, state, user)
-                    case StaticButtons.todo_note.text:
-                        await need_more_buttons_note(message)
-            case AppState.content.state:
-                match text:
-                    case StaticButtons.main_menu.text:
-                        await to_main_menu(message, state, user)
-                    case StaticButtons.todo_note.text:
-                        await need_more_buttons_note(message)
-            case AppState.creators.state:
-                match text:
-                    case StaticButtons.main_menu.text:
-                        await to_main_menu(message, state, user)
-                    case StaticButtons.todo_note.text:
-                        await need_more_buttons_note(message)
-            case _:
-                raise Exception("something 15")
+                case _:
+                    await handle_answer(message, state, user, session)
+        case AppState.settings.state:
+            match text:
+                case StaticButtons.main_menu.text:
+                    await to_main_menu(message, state, user)
+                case StaticButtons.todo_note.text:
+                    await need_more_buttons_note(message)
+        case AppState.content.state:
+            match text:
+                case StaticButtons.main_menu.text:
+                    await to_main_menu(message, state, user)
+                case StaticButtons.todo_note.text:
+                    await need_more_buttons_note(message)
+        case AppState.creators.state:
+            match text:
+                case StaticButtons.main_menu.text:
+                    await to_main_menu(message, state, user)
+                case StaticButtons.todo_note.text:
+                    await need_more_buttons_note(message)
+        case _:
+            raise Exception("something 15")
 
 
 async def main():

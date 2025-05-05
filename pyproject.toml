@@ -12,11 +12,11 @@ sqlalchemy = "^2.0.40"
 minio = "^7.2.15"
 redis = "^5.2.1"
 aiogram = "^3.20.0.post0"
-dependency-injector = "^4.46.0"
 isort = "^6.0.1"
 alembic = "^1.15.2"
 pydantic = "^2.11.3"
 pydantic-settings = "^2.9.1"
+fast-depends = "^2.4.12"
 
 
 [tool.poetry.group.dev.dependencies]

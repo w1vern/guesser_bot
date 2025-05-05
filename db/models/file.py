@@ -1,7 +1,10 @@
 from enum import Enum
 from uuid import UUID, uuid4
-from .base import Base
+
 from sqlalchemy.orm import Mapped, mapped_column
+
+from .base import Base
+
 
 class FileType(str, Enum):
     audio = "audio"

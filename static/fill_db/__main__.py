@@ -1,16 +1,14 @@
 
 
 import asyncio
-import os
 import mimetypes
+import os
 
 from minio import Minio
 
-from db.repositories import FileRepository, QuestionRepository, UserRepository
 from config import settings
-
 from db.main import DatabaseSessionManager, get_db_url
-
+from db.repositories import FileRepository, QuestionRepository, UserRepository
 
 directory_path = './content/'
 

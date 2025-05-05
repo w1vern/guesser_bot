@@ -1,10 +1,12 @@
 
+from typing import Optional, Protocol
 from unittest import result
 from uuid import UUID
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional, Protocol
-from db.models import User, Question, Battle
+
+from db.models import Battle, Question, User
 
 
 class RankChangeFunction(Protocol):

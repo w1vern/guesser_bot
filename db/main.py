@@ -7,7 +7,6 @@ from sqlalchemy.ext.asyncio import (AsyncConnection, AsyncSession,
 from db.models.base import Base
 
 
-
 class DatabaseSessionManager:
     def __init__(self, host: str, engine_kwargs: dict[str, Any] = {}):
         self._engine = create_async_engine(host, **engine_kwargs)

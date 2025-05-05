@@ -1,9 +1,11 @@
 
 
+from typing import Optional
 from uuid import UUID
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional
+
 from db.models import User
 
 

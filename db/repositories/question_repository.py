@@ -1,11 +1,13 @@
 
 
 import re
+from typing import Optional
 from uuid import UUID
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional
-from db.models import User, File, Question
+
+from db.models import File, Question, User
 
 
 class QuestionRepository:

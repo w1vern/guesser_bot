@@ -3,11 +3,12 @@ from enum import Enum
 from uuid import UUID, uuid4
 
 from sqlalchemy import ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
-from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .file import File
 from .user import User
+
 
 class QuestionType(str, Enum):
     select = "select"
