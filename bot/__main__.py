@@ -1,13 +1,17 @@
 
 
+from ast import Call
 import asyncio
 import math
 import random
-from typing import Annotated, Protocol, Tuple
+from types import CoroutineType
+from typing import Annotated, Any, Awaitable, Protocol, Tuple, Callable, Type
+from unittest.mock import NonCallableMagicMock
 
 from aiogram import Bot, Dispatcher, Router, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
+from aiogram.fsm.storage.base import StorageKey
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (BufferedInputFile, KeyboardButton,
                            ReplyKeyboardMarkup, ReplyKeyboardRemove)
@@ -105,12 +109,26 @@ class StaticButtons:
 router = Router()
 
 
+class MyState(State):
+    def __init__(self, state: str, parent_state: "MyState | None" = None):
+        self._state = state
+        self._group_name = None
+        self._group: Type[StatesGroup] | None = None
+        self._parent = parent_state
+
+    @property
+    def state(self) -> str:
+        if self._parent:
+            return f"{self._parent.state}/{self._state}"
+        return self._state
+
+
 class AppState(StatesGroup):
-    main_menu = State()
-    play = State()
-    settings = State()
-    content = State()
-    creators = State()
+    main_menu = MyState("main_menu")
+    play = MyState("play", main_menu)
+    settings_menu = MyState("settings_menu", main_menu)
+    content_menu = MyState("content_menu", main_menu)
+    creators_menu = MyState("creators_menu", main_menu)
 
 
 class GetKeyboardSizeFunction(Protocol):
@@ -217,37 +235,41 @@ def creators_keyboard(user: User) -> ReplyKeyboardMarkup:
     return create_keyboard([StaticButtons.todo_note.text, StaticButtons.main_menu.text])
 
 
-async def start_game(target: types.Message, state: FSMContext, session: AsyncSession) -> None:
+async def start_game(message: types.Message, state: FSMContext, user: User, session: AsyncSession) -> None:
     await state.set_state(AppState.play)
-    await send_question(target, state, session)
+    await send_question(message, state, session)
 
 
-async def end_game(target: types.Message, state: FSMContext, user: User) -> None:
-    await to_main_menu(target, state, user)
+async def end_game(message: types.Message, state: FSMContext, user: User, session: AsyncSession) -> None:
+    await to_main_menu(message, state, user, session)
 
 
-async def to_main_menu(target: types.Message, state: FSMContext, user: User) -> None:
+async def to_main_menu(message: types.Message, state: FSMContext, user: User, session: AsyncSession) -> None:
     await state.set_state(AppState.main_menu)
-    await target.answer(text="use keyboard", reply_markup=main_menu_keyboard(user))
+    await message.answer(text="use keyboard", reply_markup=main_menu_keyboard(user))
 
 
-async def need_more_buttons_note(target: types.Message) -> None:
-    await target.answer(text="chose another button")
+async def need_more_buttons_note(message: types.Message, state: FSMContext, user: User, session: AsyncSession) -> None:
+    await message.answer(text="chose another button")
 
 
-async def edit_settings(target: types.Message, state: FSMContext, user: User) -> None:
-    await state.set_state(AppState.settings)
-    await target.answer(text="use keyboard", reply_markup=settings_keyboard(user))
+async def edit_settings(message: types.Message, state: FSMContext, user: User, session: AsyncSession) -> None:
+    await state.set_state(AppState.settings_menu)
+    await message.answer(text="use keyboard", reply_markup=settings_keyboard(user))
 
 
-async def edit_content(target: types.Message, state: FSMContext, user: User) -> None:
-    await state.set_state(AppState.content)
-    await target.answer(text="use keyboard", reply_markup=content_keyboard(user))
+async def edit_content(message: types.Message, state: FSMContext, user: User, session: AsyncSession) -> None:
+    await state.set_state(AppState.content_menu)
+    await message.answer(text="use keyboard", reply_markup=content_keyboard(user))
 
 
-async def edit_creators(target: types.Message, state: FSMContext, user: User) -> None:
-    await state.set_state(AppState.creators)
-    await target.answer(text="use keyboard", reply_markup=creators_keyboard(user))
+async def edit_creators(message: types.Message, state: FSMContext, user: User, session: AsyncSession) -> None:
+    await state.set_state(AppState.creators_menu)
+    await message.answer(text="use keyboard", reply_markup=creators_keyboard(user))
+
+
+async def incorrect_input(message: types.Message, state: FSMContext, user: User, session: AsyncSession) -> None:
+    await message.answer(text="error, use keyboard")
 
 
 async def handle_answer(message: types.Message, state: FSMContext, user: User, session: AsyncSession) -> None:
@@ -285,57 +307,57 @@ async def handle_answer(message: types.Message, state: FSMContext, user: User, s
 
 @router.message(Command("start"))
 @inject
-async def cmd_start(message: types.Message, state: FSMContext, user: CreateUser):
+async def cmd_start(message: types.Message, state: FSMContext, user: CreateUser, session: Session):
     await message.answer(f"hello, your rank: {user.rank}")
-    await to_main_menu(message, state, user)
+    await to_main_menu(message, state, user, session)
+
+
+class Handler(Protocol):
+    def __call__(self,
+                 message: types.Message,
+                 state: FSMContext,
+                 user: GetUser,
+                 session: AsyncSession
+                 ) -> Awaitable[None]:
+        ...
+
+
+behavioral_dict: dict[str, Handler] = {
+    f"{AppState.main_menu.state}/{StaticButtons.start_game.text}": start_game,
+    f"{AppState.main_menu.state}/{StaticButtons.settings.text}": edit_settings,
+    f"{AppState.main_menu.state}/{StaticButtons.creators.text}": edit_creators,
+    f"{AppState.main_menu.state}/{StaticButtons.content.text}": edit_content,
+    f"{AppState.play.state}/{StaticButtons.end_game.text}": end_game,
+    f"{AppState.play.state}": handle_answer,
+    f"{AppState.content_menu.state}": incorrect_input,
+    f"{AppState.creators_menu.state}": incorrect_input,
+    f"{AppState.settings_menu.state}": incorrect_input,
+    f"{AppState.settings_menu.state}/{StaticButtons.todo_note.text}": need_more_buttons_note,
+    f"{AppState.creators_menu.state}/{StaticButtons.todo_note.text}": need_more_buttons_note,
+    f"{AppState.content_menu.state}/{StaticButtons.todo_note.text}": need_more_buttons_note,
+    f"{AppState.settings_menu.state}/{StaticButtons.main_menu.text}": to_main_menu,
+    f"{AppState.creators_menu.state}/{StaticButtons.main_menu.text}": to_main_menu,
+    f"{AppState.content_menu.state}/{StaticButtons.main_menu.text}": to_main_menu
+}
+
+
+def get_func(current_state: str | None, message: str | None) -> Handler:
+    if not current_state:
+        raise Exception("current state is None")
+    if not message:
+        raise Exception("message is None")
+    func = behavioral_dict.get(f"{current_state}/{message}")
+    if not func:
+        func = behavioral_dict.get(current_state)
+    if not func:
+        func = incorrect_input
+    return func
 
 
 @router.message()
 @inject
-async def handle_button(message: types.Message, state: FSMContext, session: Session, user: GetUser):
-    text = message.text
-    current = await state.get_state()
-
-    match current:
-        case AppState.main_menu.state:
-            match text:
-                case StaticButtons.start_game.text:
-                    await start_game(message, state, session)
-                case StaticButtons.settings.text:
-                    await edit_settings(message, state, user)
-                case StaticButtons.content.text:
-                    await edit_content(message, state, user)
-                case StaticButtons.creators.text:
-                    await edit_creators(message, state, user)
-                case _:
-                    raise Exception("something 12")
-        case AppState.play.state:
-            match text:
-                case StaticButtons.end_game.text:
-                    await end_game(message, state, user)
-
-                case _:
-                    await handle_answer(message, state, user, session)
-        case AppState.settings.state:
-            match text:
-                case StaticButtons.main_menu.text:
-                    await to_main_menu(message, state, user)
-                case StaticButtons.todo_note.text:
-                    await need_more_buttons_note(message)
-        case AppState.content.state:
-            match text:
-                case StaticButtons.main_menu.text:
-                    await to_main_menu(message, state, user)
-                case StaticButtons.todo_note.text:
-                    await need_more_buttons_note(message)
-        case AppState.creators.state:
-            match text:
-                case StaticButtons.main_menu.text:
-                    await to_main_menu(message, state, user)
-                case StaticButtons.todo_note.text:
-                    await need_more_buttons_note(message)
-        case _:
-            raise Exception("something 15")
+async def handle_button(message: types.Message, state: FSMContext, user: GetUser, session: Session):
+    await get_func(await state.get_state(), message.text)(message, state, user, session)
 
 
 async def main():
@@ -343,12 +365,23 @@ async def main():
     dp = Dispatcher()
 
     @dp.startup()
-    async def on_startup() -> None:
-        await bot.send_message(settings.tg_admin_id, "bot startup")
+    @inject
+    async def on_startup(session: Session) -> None:
+        ur = UserRepository(session)
+        users = await ur.all()
+        for user in users:
+            state = FSMContext(storage=dp.storage, key=StorageKey(
+                bot.id, user.tg_id, user.tg_id))
+            await state.set_state(AppState.main_menu)
+            await bot.send_message(chat_id=user.tg_id, text="bot startup", reply_markup=main_menu_keyboard(user))
 
     @dp.shutdown()
-    async def on_shutdown() -> None:
-        await bot.send_message(settings.tg_admin_id, "bot shuting down", reply_markup=ReplyKeyboardRemove())
+    @inject
+    async def on_shutdown(session) -> None:
+        ur = UserRepository(session)
+        users = await ur.all()
+        for user in users:
+            await bot.send_message(user.tg_id, "bot shuting down", reply_markup=ReplyKeyboardRemove())
     dp.include_router(router)
     await dp.start_polling(bot)
 

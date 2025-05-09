@@ -19,22 +19,26 @@ class UserRepository:
                      admin: bool = False,
                      creator: bool = False
                      ) -> Optional[User]:
-        user = User(tg_id=tg_id, 
-                    rank=rank, 
-                    admin=admin, 
+        user = User(tg_id=tg_id,
+                    rank=rank,
+                    admin=admin,
                     creator=creator)
         self.session.add(user)
         await self.session.flush()
         return await self.get_by_id(user.id)
-    
+
     async def get_by_id(self, user_id: UUID) -> Optional[User]:
         stmt = select(User).where(User.id == user_id)
         return await self.session.scalar(stmt)
-    
+
     async def get_by_tg_id(self, tg_id: int) -> Optional[User]:
         stmt = select(User).where(User.tg_id == tg_id)
         return await self.session.scalar(stmt)
-    
+
+    async def all(self) -> list[User]:
+        stmt = select(User)
+        return list((await self.session.scalars(stmt)).all())
+
     async def change_rank(self, user: User, rank_diff: float) -> None:
         user.rank += rank_diff
         if user.rank <= 0 or user.rank >= 1:
