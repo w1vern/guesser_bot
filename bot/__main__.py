@@ -377,7 +377,7 @@ async def main():
 
     @dp.shutdown()
     @inject
-    async def on_shutdown(session) -> None:
+    async def on_shutdown(session: Session) -> None:
         ur = UserRepository(session)
         users = await ur.all()
         for user in users:
