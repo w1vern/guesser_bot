@@ -1,6 +1,5 @@
 
 from typing import Optional, Protocol
-from unittest import result
 from uuid import UUID
 
 from sqlalchemy import select

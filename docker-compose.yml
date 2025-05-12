@@ -20,8 +20,6 @@ services:
     container_name: bot-bot
     env_file:
       - prod.env
-    depends_on:
-      - redis
     networks:
       - app-network
     profiles:
@@ -34,8 +32,6 @@ services:
     command: python -m static.fill_db
     env_file:
       - prod.env
-    depends_on:
-      - redis
     networks:
       - app-network
 

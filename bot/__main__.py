@@ -1,12 +1,9 @@
 
 
-from ast import Call
 import asyncio
 import math
 import random
-from types import CoroutineType
-from typing import Annotated, Any, Awaitable, Protocol, Tuple, Callable, Type
-from unittest.mock import NonCallableMagicMock
+from typing import Annotated, Awaitable, Protocol, Tuple, Type
 
 from aiogram import Bot, Dispatcher, Router, types
 from aiogram.filters import Command
@@ -141,8 +138,8 @@ class GetKeyboardSizeFunction(Protocol):
 def get_keyboard_size(values: list[str]) -> list[int]:
     in_a_row = 4
     length = len(values)
-    res = []
-    for i in range(in_a_row, length + 1, in_a_row):
+    res: list[int] = []
+    for _ in range(in_a_row, length + 1, in_a_row):
         res.append(4)
     if length % in_a_row:
         res.append(length % in_a_row)
@@ -204,7 +201,7 @@ async def send_question(target: types.Message, state: FSMContext, session: Sessi
 
 
 def main_menu_keyboard(user: User) -> ReplyKeyboardMarkup:
-    values = []
+    values: list[str] = []
     values.append(StaticButtons.start_game.text)
     values.append(StaticButtons.settings.text)
     if user.admin:
@@ -215,7 +212,7 @@ def main_menu_keyboard(user: User) -> ReplyKeyboardMarkup:
 
 
 def game_keyboard(questions: list[Question]) -> ReplyKeyboardMarkup:
-    values = []
+    values: list[str] = []
     for q in questions:
         values.append(q.answer)
     random.shuffle(values)
