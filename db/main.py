@@ -87,8 +87,3 @@ class GetDBUrl(Protocol):
                  name: str
                  ) -> str:
         ...
-
-
-get_db_url: GetDBUrl = get_db_postgres_url
-
-# session_manager = DatabaseSessionManager(DATABASE_URL, {"echo": False})
