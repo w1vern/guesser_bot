@@ -1,5 +1,5 @@
 import contextlib
-from typing import Any, AsyncGenerator, AsyncIterator
+from typing import Any, AsyncGenerator, AsyncIterator, Protocol
 
 from sqlalchemy.ext.asyncio import (AsyncConnection, AsyncSession,
                                     async_sessionmaker, create_async_engine)
@@ -8,7 +8,10 @@ from db.models.base import Base
 
 
 class DatabaseSessionManager:
-    def __init__(self, host: str, engine_kwargs: dict[str, Any] = {}):
+    def __init__(self,
+                 host: str,
+                 engine_kwargs: dict[str, Any] = {}
+                 ) -> None:
         self._engine = create_async_engine(host, **engine_kwargs)
         self._sessionmaker = async_sessionmaker(
             autocommit=False, bind=self._engine, expire_on_commit=False)
@@ -52,18 +55,40 @@ class DatabaseSessionManager:
         async for session in self.session():
             yield session
 
-
     async def create_db_and_tables(self):
         async with self.connect() as conn:
             await conn.run_sync(Base.metadata.create_all)
 
 
-def get_db_postgres_url(user: str, password: str, ip: str, port: int, name: str) -> str:
+def get_db_postgres_url(user: str,
+                        password: str,
+                        ip: str,
+                        port: int,
+                        name: str
+                        ) -> str:
     return f"postgresql+asyncpg://{user}:{password}@{ip}:{port}/{name}"
 
-def get_db_sqlite_url(user: str, password: str, ip: str, port: int, name: str) -> str:
+
+def get_db_sqlite_url(user: str,
+                      password: str,
+                      ip: str,
+                      port: int,
+                      name: str
+                      ) -> str:
     return f"sqlite+aiosqlite:///{name}.db"
 
-get_db_url = get_db_postgres_url
+
+class GetDBUrl(Protocol):
+    def __call__(self,
+                 user: str,
+                 password: str,
+                 ip: str,
+                 port: int,
+                 name: str
+                 ) -> str:
+        ...
+
+
+get_db_url: GetDBUrl = get_db_postgres_url
 
 # session_manager = DatabaseSessionManager(DATABASE_URL, {"echo": False})

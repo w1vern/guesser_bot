@@ -1,5 +1,4 @@
 
-
 import asyncio
 import math
 import random
@@ -8,8 +7,8 @@ from typing import Annotated, Awaitable, Protocol, Tuple, Type
 from aiogram import Bot, Dispatcher, Router, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.storage.base import StorageKey
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.storage.base import StorageKey
 from aiogram.types import (BufferedInputFile, KeyboardButton,
                            ReplyKeyboardMarkup, ReplyKeyboardRemove)
 from fast_depends import Depends, inject
@@ -24,7 +23,6 @@ from db.repositories.question_repository import QuestionRepository
 from db.repositories.user_repository import UserRepository
 from db.s3 import get_s3_client
 
-
 session_manager = DatabaseSessionManager(
     get_db_url(
         user=settings.db_user,
@@ -38,7 +36,10 @@ session_manager = DatabaseSessionManager(
 Session = Annotated[AsyncSession, Depends(session_manager.session)]
 
 
-def change_rank(user_rank: float, question_rank: float, result: bool) -> Tuple[float, float]:
+def change_rank(user_rank: float,
+                question_rank: float,
+                result: bool
+                ) -> Tuple[float, float]:
     k = 5.0
     alpha = 0.1
 
@@ -53,11 +54,14 @@ def change_rank(user_rank: float, question_rank: float, result: bool) -> Tuple[f
     return user_diff, question_diff
 
 
-def convert_rank(rank: float) -> int:
+def convert_rank(rank: float
+                 ) -> int:
     return int(rank*1000)
 
 
-async def get_user(message: types.Message, session: Session) -> User:
+async def get_user(message: types.Message,
+                   session: Session
+                   ) -> User:
     if not message.from_user:
         raise Exception("something 16")
     ur = UserRepository(session)
@@ -68,7 +72,9 @@ async def get_user(message: types.Message, session: Session) -> User:
 GetUser = Annotated[User, Depends(get_user)]
 
 
-async def register_user(message: types.Message, session: Session) -> User:
+async def register_user(message: types.Message,
+                        session: Session
+                        ) -> User:
     if not message.from_user:
         raise Exception("something 16")
     ur = UserRepository(session)
@@ -83,7 +89,11 @@ CreateUser = Annotated[User, Depends(register_user)]
 
 
 class StaticButton():
-    def __init__(self, text: str, only_for_admin: bool = False, only_for_creator: bool = False) -> None:
+    def __init__(self,
+                 text: str,
+                 only_for_admin: bool = False,
+                 only_for_creator: bool = False
+                 ) -> None:
         self.text = text
         self.only_for_admin = only_for_admin
         self.only_for_creator = only_for_creator
@@ -107,7 +117,10 @@ router = Router()
 
 
 class MyState(State):
-    def __init__(self, state: str, parent_state: "MyState | None" = None):
+    def __init__(self,
+                 state: str,
+                 parent_state: "MyState | None" = None
+                 ) -> None:
         self._state = state
         self._group_name = None
         self._group: Type[StatesGroup] | None = None
@@ -135,7 +148,8 @@ class GetKeyboardSizeFunction(Protocol):
         ...
 
 
-def get_keyboard_size(values: list[str]) -> list[int]:
+def get_keyboard_size(values: list[str]
+                      ) -> list[int]:
     in_a_row = 4
     length = len(values)
     res: list[int] = []
@@ -146,7 +160,9 @@ def get_keyboard_size(values: list[str]) -> list[int]:
     return res
 
 
-def create_keyboard(values: list[str], keyboard_size: GetKeyboardSizeFunction = get_keyboard_size) -> ReplyKeyboardMarkup:
+def create_keyboard(values: list[str],
+                    keyboard_size: GetKeyboardSizeFunction = get_keyboard_size
+                    ) -> ReplyKeyboardMarkup:
     markup = keyboard_size(values)
     keyboard: list[list[KeyboardButton]] = []
     index = 0
@@ -159,7 +175,10 @@ def create_keyboard(values: list[str], keyboard_size: GetKeyboardSizeFunction = 
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True, input_field_placeholder="guess")
 
 
-async def send_question(target: types.Message, state: FSMContext, session: Session):
+async def send_question(target: types.Message,
+                        state: FSMContext,
+                        session: Session
+                        ) -> None:
     qr = QuestionRepository(session)
     current_question = await qr.get_random_question()
     if not current_question:
@@ -195,12 +214,13 @@ async def send_question(target: types.Message, state: FSMContext, session: Sessi
         case "audio":
             await target.answer_voice(voice=input_file, caption=caption, reply_markup=keyboard)
         case _:
-            target.answer("internal server error")
+            await target.answer("internal server error")
 
     await state.update_data(question_id=current_question.id)
 
 
-def main_menu_keyboard(user: User) -> ReplyKeyboardMarkup:
+def main_menu_keyboard(user: User
+                       ) -> ReplyKeyboardMarkup:
     values: list[str] = []
     values.append(StaticButtons.start_game.text)
     values.append(StaticButtons.settings.text)
@@ -211,7 +231,8 @@ def main_menu_keyboard(user: User) -> ReplyKeyboardMarkup:
     return create_keyboard(values)
 
 
-def game_keyboard(questions: list[Question]) -> ReplyKeyboardMarkup:
+def game_keyboard(questions: list[Question]
+                  ) -> ReplyKeyboardMarkup:
     values: list[str] = []
     for q in questions:
         values.append(q.answer)
@@ -220,56 +241,95 @@ def game_keyboard(questions: list[Question]) -> ReplyKeyboardMarkup:
     return create_keyboard(values)
 
 
-def settings_keyboard(user: User) -> ReplyKeyboardMarkup:
+def settings_keyboard(user: User
+                      ) -> ReplyKeyboardMarkup:
     return create_keyboard([StaticButtons.todo_note.text, StaticButtons.main_menu.text])
 
 
-def content_keyboard(user: User) -> ReplyKeyboardMarkup:
+def content_keyboard(user: User
+                     ) -> ReplyKeyboardMarkup:
     return create_keyboard([StaticButtons.todo_note.text, StaticButtons.main_menu.text])
 
 
-def creators_keyboard(user: User) -> ReplyKeyboardMarkup:
+def creators_keyboard(user: User
+                      ) -> ReplyKeyboardMarkup:
     return create_keyboard([StaticButtons.todo_note.text, StaticButtons.main_menu.text])
 
 
-async def start_game(message: types.Message, state: FSMContext, user: User, session: AsyncSession) -> None:
+async def start_game(message: types.Message,
+                     state: FSMContext,
+                     user: User,
+                     session: AsyncSession
+                     ) -> None:
     await state.set_state(AppState.play)
     await send_question(message, state, session)
 
 
-async def end_game(message: types.Message, state: FSMContext, user: User, session: AsyncSession) -> None:
+async def end_game(message: types.Message,
+                   state: FSMContext,
+                   user: User,
+                   session: AsyncSession
+                   ) -> None:
     await to_main_menu(message, state, user, session)
 
 
-async def to_main_menu(message: types.Message, state: FSMContext, user: User, session: AsyncSession) -> None:
+async def to_main_menu(message: types.Message,
+                       state: FSMContext,
+                       user: User,
+                       session: AsyncSession
+                       ) -> None:
     await state.set_state(AppState.main_menu)
     await message.answer(text="use keyboard", reply_markup=main_menu_keyboard(user))
 
 
-async def need_more_buttons_note(message: types.Message, state: FSMContext, user: User, session: AsyncSession) -> None:
+async def need_more_buttons_note(message: types.Message,
+                                 state: FSMContext,
+                                 user: User,
+                                 session: AsyncSession
+                                 ) -> None:
     await message.answer(text="chose another button")
 
 
-async def edit_settings(message: types.Message, state: FSMContext, user: User, session: AsyncSession) -> None:
+async def edit_settings(message: types.Message,
+                        state: FSMContext,
+                        user: User,
+                        session: AsyncSession
+                        ) -> None:
     await state.set_state(AppState.settings_menu)
     await message.answer(text="use keyboard", reply_markup=settings_keyboard(user))
 
 
-async def edit_content(message: types.Message, state: FSMContext, user: User, session: AsyncSession) -> None:
+async def edit_content(message: types.Message,
+                       state: FSMContext,
+                       user: User, session:
+                       AsyncSession
+                       ) -> None:
     await state.set_state(AppState.content_menu)
     await message.answer(text="use keyboard", reply_markup=content_keyboard(user))
 
 
-async def edit_creators(message: types.Message, state: FSMContext, user: User, session: AsyncSession) -> None:
+async def edit_creators(message: types.Message,
+                        state: FSMContext,
+                        user: User,
+                        session: AsyncSession
+                        ) -> None:
     await state.set_state(AppState.creators_menu)
     await message.answer(text="use keyboard", reply_markup=creators_keyboard(user))
 
 
-async def incorrect_input(message: types.Message, state: FSMContext, user: User, session: AsyncSession) -> None:
+async def incorrect_input(message: types.Message,
+                          state: FSMContext,
+                          user: User,
+                          session: AsyncSession
+                          ) -> None:
     await message.answer(text="error, use keyboard")
 
 
-async def handle_answer(message: types.Message, state: FSMContext, user: User, session: AsyncSession) -> None:
+async def handle_answer(message: types.Message,
+                        state: FSMContext,
+                        user: User,
+                        session: AsyncSession
+                        ) -> None:
     if not message.text:
         raise Exception("something 2")
     data = await state.get_data()
@@ -291,8 +351,6 @@ async def handle_answer(message: types.Message, state: FSMContext, user: User, s
         raise Exception("something 10")
     await ur.change_rank(user, battle.user_change)
     await qr.change_rank(correct_answer, battle.question_change)
-    if not battle:
-        raise Exception("something 8")
 
     if res:
         await message.answer(f"✅ Right! Rank change: +{convert_rank(battle.user_rank + battle.user_change) - convert_rank(battle.user_rank)} (now {convert_rank(battle.user_change + battle.user_rank)})")
@@ -304,7 +362,11 @@ async def handle_answer(message: types.Message, state: FSMContext, user: User, s
 
 @router.message(Command("start"))
 @inject
-async def cmd_start(message: types.Message, state: FSMContext, user: CreateUser, session: Session):
+async def cmd_start(message: types.Message,
+                    state: FSMContext,
+                    user: CreateUser,
+                    session: Session
+                    ) -> None:
     await message.answer(f"hello, your rank: {user.rank}")
     await to_main_menu(message, state, user, session)
 
@@ -338,7 +400,9 @@ behavioral_dict: dict[str, Handler] = {
 }
 
 
-def get_func(current_state: str | None, message: str | None) -> Handler:
+def get_func(current_state: str | None,
+             message: str | None
+             ) -> Handler:
     if not current_state:
         raise Exception("current state is None")
     if not message:
@@ -353,17 +417,27 @@ def get_func(current_state: str | None, message: str | None) -> Handler:
 
 @router.message()
 @inject
-async def handle_button(message: types.Message, state: FSMContext, user: GetUser, session: Session):
-    await get_func(await state.get_state(), message.text)(message, state, user, session)
+async def handle_button(message: types.Message,
+                        state: FSMContext,
+                        user: GetUser,
+                        session: Session
+                        ) -> None:
+    await get_func(
+        await state.get_state(),
+        message.text)(message,
+                      state,
+                      user,
+                      session)
 
 
-async def main():
+async def main() -> None:
     bot = Bot(token=settings.tg_bot_token)
     dp = Dispatcher()
 
     @dp.startup()
     @inject
-    async def on_startup(session: Session) -> None:
+    async def on_startup(session: Session
+                         ) -> None:
         ur = UserRepository(session)
         users = await ur.all()
         for user in users:
@@ -374,7 +448,8 @@ async def main():
 
     @dp.shutdown()
     @inject
-    async def on_shutdown(session: Session) -> None:
+    async def on_shutdown(session: Session
+                          ) -> None:
         ur = UserRepository(session)
         users = await ur.all()
         for user in users:
