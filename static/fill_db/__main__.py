@@ -7,14 +7,14 @@ import os
 from minio import Minio
 
 from config import settings
-from db.main import DatabaseSessionManager, get_db_url
+from db.main import DatabaseSessionManager, get_db_postgres_url
 from db.repositories import FileRepository, QuestionRepository, UserRepository
 
 directory_path = './content/'
 
 
 async def main():
-    DB_URL = get_db_url(user=settings.db_user, password=settings.db_password,
+    DB_URL = get_db_postgres_url(user=settings.db_user, password=settings.db_password,
                                ip=settings.db_ip, port=settings.db_port, name=settings.db_name)
     session_manager = DatabaseSessionManager(DB_URL, {"echo": False})
     minio_client = Minio(
@@ -44,6 +44,7 @@ async def main():
                 db_file = await fr.create(file_type=mime_type, answer=prefix, description="")
                 if db_file is None:
                     raise Exception("File not created")
+                print("Hello", db_file.id)
                 minio_client.fput_object(settings.minio_bucket, str(
                     db_file.id), full_path, mime_type)
                 q = await qr.create(file=db_file, creator=user, answers_count=4, rank=0.5)
